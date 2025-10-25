@@ -1,18 +1,21 @@
 import React, { useRef, useState, useEffect } from "react";
-import { jsPDF } from "jspdf";
 import { useParams, useNavigate } from "react-router-dom";
+import { supabaseclient } from "./Config/supabase";
 import {
   ArrowLeft,
-  Download,
   Send,
   Undo,
   Redo,
   Eraser,
   Pen,
   Trash2,
-  FileText,
-  Printer,
   Type,
+  User,
+  Calendar,
+  Hash,
+  Stethoscope,
+  UserCircle,
+  FileText
 } from "lucide-react";
 import { useToast } from "../Context/ToastContext";
 
@@ -21,14 +24,19 @@ const PatientFormPage = () => {
   const navigate = useNavigate();
   const { success, error: showError, info } = useToast();
 
-  // Patient data - Replace with actual API call
+  // Patient data state
   const [patient, setPatient] = useState({
-    name: "John Smith",
+    name: "",
     mrno: mrno,
-    phone: "+919876543210",
-    age: 45,
-    gender: "Male",
+    dob: "",
+    age: "",
+    gender: "",
+    consultant: "",
+    aadhaar: "",
+    address: "",
+    phone: ""
   });
+  const [loading, setLoading] = useState(true);
 
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
@@ -74,6 +82,78 @@ const PatientFormPage = () => {
 
   const [selectedForms, setSelectedForms] = useState([]);
   const [activeForm, setActiveForm] = useState(null);
+
+  // Fetch patient data
+  useEffect(() => {
+    const fetchPatient = async () => {
+      try {
+        setLoading(true);
+        console.log("Fetching patient data for MR No:", mrno);
+        
+        // First try to fetch from patients table
+        let { data, error } = await supabaseclient
+          .from("patients")
+          .select("*")
+          .eq("mrno", mrno)
+          .single();
+
+        // If not found in patients table, try users table
+        if (error || !data) {
+          console.log("Patient not found in 'patients' table, trying 'users' table");
+          const usersResult = await supabaseclient
+            .from("users")
+            .select("*")
+            .eq("mrno", mrno)
+            .single();
+          
+          if (usersResult.error) throw usersResult.error;
+          data = usersResult.data;
+        }
+
+        console.log("Fetched patient data:", data);
+        
+        if (data) {
+          // Calculate age from DOB if available
+          let age = '';
+          if (data.dob) {
+            const birthDate = new Date(data.dob);
+            if (!isNaN(birthDate.getTime())) {
+              const today = new Date();
+              let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+              const monthDiff = today.getMonth() - birthDate.getMonth();
+              
+              if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                calculatedAge--;
+              }
+              age = calculatedAge.toString();
+            }
+          }
+          
+          setPatient({
+            name: data.name || data.full_name || "",
+            mrno: data.mrno || "",
+            dob: data.dob ? new Date(data.dob).toLocaleDateString() : "",
+            age: age,
+            gender: data.gender || "",
+            consultant: data.consultant || data.doctor || "Dr. Smith"
+          });
+        }
+      } catch (err) {
+        console.error("Error fetching patient data:", err);
+        showError("Failed to load patient details. Please check console for details.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (mrno) {
+      fetchPatient();
+    } else {
+      console.error("No MR Number provided in URL");
+      showError("No patient MR number provided");
+      setLoading(false);
+    }
+  }, [mrno, showError]);
 
   // Load all forms
   useEffect(() => {
@@ -584,192 +664,10 @@ const PatientFormPage = () => {
     }
     
     // Update last position
-    lastX.current = x;
-    lastY.current = y;
-    lastDrawTime.current = now;
-  };
-
-  const handleTouchEnd = (e) => {
-    e.preventDefault();
-    if (drawing) {
-      const now = Date.now();
-      const duration = now - startTime.current;
-      const distance = Math.sqrt((lastX.current - startX.current) ** 2 + (lastY.current - startY.current) ** 2);
-      
-      // Detect dots: short duration and small movement
-      if (duration < 200 && distance < 5) {
-        // Draw a dot for single clicks/taps with selected color
-        ctx.beginPath();
-        ctx.arc(startX.current, startY.current, lineWidth / 2, 0, Math.PI * 2);
-        ctx.fillStyle = color;
-        ctx.fill();
-      }
-      
-      ctx.closePath();
-      saveHistory();
-      isDrawingRef.current = false;
-    }
-    setDrawing(false);
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-teal-50/20 py-6">
-      <div className="max-w-[1800px] mx-auto px-6">
-        {/* Header */}
-        <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate(`/patient/${mrno}`)}
-              className="p-2 hover:bg-white rounded-lg transition-colors"
-            >
-              <ArrowLeft className="w-6 h-6 text-slate-700" />
-            </button>
-            <div>
-              <h1 className="text-3xl font-bold text-slate-900">Medical Forms</h1>
-              <p className="text-slate-600">
-                {patient.name} • MR No: {patient.mrno}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex gap-2 flex-wrap">
-            <button
-              onClick={printForm}
-              disabled={!activeForm}
-              className="px-4 py-2 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2 disabled:opacity-50"
-            >
-              <Printer className="w-5 h-5" />
-              Print
-            </button>
-            <button
-              onClick={saveAsPNG}
-              disabled={saving || !activeForm}
-              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
-            >
-              <Download className="w-5 h-5" />
-              Save PNG
-            </button>
-            <button
-              onClick={saveAsPDF}
-              disabled={saving || !activeForm}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
-            >
-              <FileText className="w-5 h-5" />
-              Save PDF
-            </button>
-            <button
-              onClick={sendToWhatsApp}
-              disabled={saving || !activeForm}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
-            >
-              <Send className="w-5 h-5" />
-              WhatsApp
-            </button>
-          </div>
-        </div>
-
-        {/* Form Selection */}
-        <div className="mb-6 bg-white rounded-xl shadow-md p-4 border border-slate-100">
-          <label className="block text-sm font-semibold text-slate-700 mb-3">
-            Select Form Template ({selectedForms.length} forms available)
-          </label>
-          <select
-            className="w-full p-3 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
-            value={activeForm?.name || ""}
-            onChange={(e) => {
-              const form = selectedForms.find((f) => f.name === e.target.value);
-              if (form) {
-                setActiveForm(form);
-                setImageLoaded(false);
-                // Clear canvas when changing forms
-                if (ctx) {
-                  ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-                }
-              }
-            }}
-          >
-            <option value="" disabled>
-              -- Select a form --
-            </option>
-            {selectedForms.map((form) => (
-              <option key={form.name} value={form.name}>
-                {form.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Drawing Tools */}
-        <div className="mb-6 bg-white rounded-xl shadow-md p-4 border border-slate-100">
-          <div className="flex items-center gap-4 flex-wrap">
-            {/* Tool Selection */}
-            <div className="flex gap-2 border-r border-slate-200 pr-4">
-              <button
-                onClick={() => setTool("pen")}
-                className={`p-3 rounded-lg transition-all ${
-                  tool === "pen" ? "bg-teal-100 text-teal-700" : "bg-slate-100 hover:bg-slate-200"
-                }`}
-                title="Pen"
-              >
-                <Pen className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => setTool("text")}
-                className={`p-3 rounded-lg transition-all ${
-                  tool === "text" ? "bg-blue-100 text-blue-700" : "bg-slate-100 hover:bg-slate-200"
-                }`}
-                title="Text Tool"
-              >
-                <Type className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => setTool("eraser")}
-                className={`p-3 rounded-lg transition-all ${
-                  tool === "eraser" ? "bg-red-100 text-red-700" : "bg-slate-100 hover:bg-slate-200"
-                }`}
-                title="Eraser"
-              >
-                <Eraser className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Color Picker */}
-            <div className="flex items-center gap-2 border-r border-slate-200 pr-4">
-              <span className="text-sm font-medium text-slate-700">Color:</span>
-              <input
-                type="color"
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-                className="w-10 h-10 rounded cursor-pointer border border-slate-300"
-              />
-              <div className="flex gap-1">
-                {presetColors.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setColor(c)}
-                    className={`w-8 h-8 rounded border-2 transition-all ${
-                      color === c ? "border-slate-900 scale-110" : "border-slate-300"
-                    }`}
-                    style={{ backgroundColor: c }}
-                    title={c}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Line Width */}
-            <div className="flex items-center gap-2 border-r border-slate-200 pr-4">
-              <span className="text-sm font-medium text-slate-700">Size:</span>
-              <input
-                type="range"
-                min={1}
-                max={20}
-                value={lineWidth}
-                onChange={(e) => setLineWidth(Number(e.target.value))}
-                className="w-32"
-              />
-              <span className="text-sm text-slate-600 w-10">{lineWidth}px</span>
-            </div>
+  lastX.current = x;
+  lastY.current = y;
+  lastDrawTime.current = now;
+}
 
             {/* Undo/Redo */}
             <div className="flex gap-2 border-r border-slate-200 pr-4">

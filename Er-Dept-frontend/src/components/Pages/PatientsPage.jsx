@@ -1,7 +1,7 @@
 // src/pages/PatientsPage.jsx
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Filter, Users, Heart, ChevronRight, ArrowLeft } from "lucide-react";
+import { Search, Filter, Users, Heart, ChevronRight, ArrowLeft, ChevronDown } from "lucide-react";
 import { useAuth } from "../Auth/Authprovider";
 import { supabaseclient } from "../Config/supabase";
 import { useToast } from "../Context/ToastContext";
@@ -15,8 +15,52 @@ const PatientsPage = () => {
   const [sortOption, setSortOption] = useState("recent");
   const [filterWard, setFilterWard] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [patientLabels, setPatientLabels] = useState({});
+  const [patientTriage, setPatientTriage] = useState({});
+  const [patientSummary, setPatientSummary] = useState({});
 
   console.log("patient list", patients);
+
+  // Test function to verify database connection and save functionality
+  const testDatabaseConnection = async () => {
+    try {
+      console.log("Testing database connection...");
+      
+      // Test read operation
+      const { data: testRead, error: readError } = await supabaseclient
+        .from('users')
+        .select('*')
+        .limit(1);
+      
+      if (readError) throw readError;
+      console.log("Read test successful:", testRead);
+      
+      // Test write operation (update a test field if it exists)
+      if (testRead && testRead.length > 0) {
+        const testPatientId = testRead[0].mrno;
+        const testLabel = 'test_' + Date.now();
+        
+        const { data: testWrite, error: writeError } = await supabaseclient
+          .from('users')
+          .update({ test_field: testLabel })
+          .eq('mrno', testPatientId)
+          .select();
+          
+        if (writeError) throw writeError;
+        console.log("Write test successful:", testWrite);
+      }
+      
+      return true;
+    } catch (err) {
+      console.error("Database test failed:", err);
+      return false;
+    }
+  };
+
+  // Run the test when component mounts
+  useEffect(() => {
+    testDatabaseConnection();
+  }, []);
 
   useEffect(() => {
     // TODO: Replace with Supabase query
@@ -28,6 +72,28 @@ const PatientsPage = () => {
         .order("created_at", { ascending: false });
       if (!error) {
         setPatients(data);
+        
+        // Load existing label data
+        const labelsData = {};
+        const triageData = {};
+        const summaryData = {};
+        
+        data.forEach(patient => {
+          if (patient.patient_label) {
+            labelsData[patient.mrno] = patient.patient_label;
+          }
+          if (patient.triage_color) {
+            triageData[patient.mrno] = patient.triage_color;
+          }
+          if (patient.summary_status) {
+            summaryData[patient.mrno] = patient.summary_status;
+          }
+        });
+        
+        setPatientLabels(labelsData);
+        setPatientTriage(triageData);
+        setPatientSummary(summaryData);
+        
         setLoading(false);
       } else {
         console.error("Unable to fetch patients!");
@@ -86,6 +152,60 @@ const PatientsPage = () => {
   }, [patients, sortOption, filterWard, searchQuery]);
 
   const wards = ["all", "ICU-2", "ER-5", "ER-3", "ER-1", "Trauma Bay"];
+
+  const labelOptions = ["MLC", "IP Credit", "DAMA", "Insurance", "Cash", "Death"];
+  const triageOptions = [
+    { value: "red", label: "Red", color: "bg-red-500" },
+    { value: "yellow", label: "Yellow", color: "bg-yellow-500" },
+    { value: "green", label: "Green", color: "bg-green-500" },
+    { value: "black", label: "Black", color: "bg-black" }
+  ];
+  const summaryOptions = ["Summary Drafted", "Summary Approved"];
+
+  const handleLabelChange = async (patientId, value) => {
+    setPatientLabels(prev => ({ ...prev, [patientId]: value }));
+    if (value) {
+      await savePatientLabels(patientId, 'patient_label', value);
+    }
+  };
+
+  const handleTriageChange = async (patientId, value) => {
+    setPatientTriage(prev => ({ ...prev, [patientId]: value }));
+    if (value) {
+      await savePatientLabels(patientId, 'triage_color', value);
+    }
+  };
+
+  const handleSummaryChange = async (patientId, value) => {
+    setPatientSummary(prev => ({ ...prev, [patientId]: value }));
+    if (value) {
+      await savePatientLabels(patientId, 'summary_status', value);
+    }
+  };
+
+  const savePatientLabels = async (patientId, labelType, value) => {
+    try {
+      const updateData = {
+        [labelType]: value,
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await supabaseclient
+        .from("users")
+        .update(updateData)
+        .eq("mrno", patientId);
+
+      if (error) {
+        console.error(`Error saving ${labelType}:`, error);
+        errorToast(`Failed to save ${labelType}`);
+      } else {
+        success(`${labelType} saved successfully`);
+      }
+    } catch (err) {
+      console.error(`Error saving ${labelType}:`, err);
+      errorToast(`Failed to save ${labelType}`);
+    }
+  };
 
   if (loading) {
     return (
@@ -182,18 +302,75 @@ const PatientsPage = () => {
                   <div className="flex-1 ">
                     <div className="flex items-center gap-2 mb-2">
                       <h4 className="font-bold text-slate-900">{patient.name}</h4>
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                          patient.condition?.toLowerCase() === "critical"
-                            ? "bg-red-100 text-red-700"
-                            : patient.condition?.toLowerCase() === "stable"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-gray-100 text-gray-700"
-                        }`}
-                      >
-                        {patient.condition || "Undefined"}
-                      </span>
                     </div>
+                    
+                    {/* Label Buttons */}
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {/* Label Dropdown */}
+                      <div className="relative">
+                        <select
+                          value={patientLabels[patient.mrno] || ""}
+                          onChange={(e) => handleLabelChange(patient.mrno, e.target.value)}
+                          className="appearance-none bg-white border border-slate-300 rounded-md px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-500 pr-6"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <option value="">Select Label</option>
+                          {labelOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-1 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+                      </div>
+
+                      {/* Triage Color Dropdown */}
+                      <div className="relative flex items-center">
+                        {patientTriage[patient.mrno] && (
+                          <div 
+                            className={`w-3 h-3 rounded-full mr-2 ${
+                              patientTriage[patient.mrno] === 'red' ? 'bg-red-500' :
+                              patientTriage[patient.mrno] === 'yellow' ? 'bg-yellow-500' :
+                              patientTriage[patient.mrno] === 'green' ? 'bg-green-500' :
+                              patientTriage[patient.mrno] === 'black' ? 'bg-black' : ''
+                            }`}
+                          />
+                        )}
+                        <select
+                          value={patientTriage[patient.mrno] || ""}
+                          onChange={(e) => handleTriageChange(patient.mrno, e.target.value)}
+                          className="appearance-none bg-white border border-slate-300 rounded-md px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-500 pr-6"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <option value="">Triage Color</option>
+                          {triageOptions.map((option) => (
+                            <option key={option.value} value={option.value} style={{ backgroundColor: option.value === 'red' ? '#ef4444' : option.value === 'yellow' ? '#eab308' : option.value === 'green' ? '#22c55e' : option.value === 'black' ? '#000000' : '#ffffff', color: option.value === 'black' ? '#ffffff' : '#000000' }}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-1 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+                      </div>
+
+                      {/* Summary Status Dropdown */}
+                      <div className="relative">
+                        <select
+                          value={patientSummary[patient.mrno] || ""}
+                          onChange={(e) => handleSummaryChange(patient.mrno, e.target.value)}
+                          className="appearance-none bg-white border border-slate-300 rounded-md px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-500 pr-6"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <option value="">Summary Status</option>
+                          {summaryOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-1 top-1/2 transform -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+                      </div>
+                    </div>
+
                     <div className="text-sm text-slate-600 space-y-1">
                       <p className="truncate max-w-[200px]" title={patient.mrno}>
                         <span className="font-medium">MRNO:</span>{" "}
@@ -208,9 +385,6 @@ const PatientsPage = () => {
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <p>
-                          <span className="font-medium">Condition:</span> {patient.condition || "NA"}
-                        </p>
                         <p>
                           <span className="font-medium">Blood Group:</span> {patient.blood_group || "NA"}
                         </p>

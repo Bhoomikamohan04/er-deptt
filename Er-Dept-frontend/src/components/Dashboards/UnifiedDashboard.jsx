@@ -542,9 +542,11 @@ const UnifiedDashboard = () => {
                                 setSortBy(option);
                                 setShowSortMenu(false);
                               }}
-                              className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 transition-colors capitalize"
+                              className={`w-full px-4 py-2 text-left text-sm ${
+                                sortBy === option ? 'bg-slate-100 text-teal-600' : 'text-slate-700 hover:bg-slate-50'
+                              } capitalize`}
                             >
-                              {option}
+                              {option === 'all' ? 'All' : option.charAt(0).toUpperCase() + option.slice(1)}
                             </button>
                           ))}
                         </div>
@@ -588,9 +590,7 @@ const UnifiedDashboard = () => {
                             </div>
                             {result.type === "patient" && (
                               <div className="mt-1 text-sm text-slate-600">
-                                <p>
-                                  MR: {result.mrno} • Ward: {result.ward}
-                                </p>
+                                <p>MR: {result.mrno} • Ward: {result.ward}</p>
                               </div>
                             )}
                           </div>
@@ -650,14 +650,14 @@ const UnifiedDashboard = () => {
         {/* Date & Time Header */}
         <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-1">Welcome back, {user?.name || "User"}!</h2>
+            <h2 className="text-2xl font-bold text-slate-900 mb-1">Welcome back, {user?.user_metadata?.full_name || "User"}!</h2>
             <p className="text-slate-600">{formatDate(currentTime)}</p>
           </div>
-          <div className="flex gap-4 justify-evenly  bg-white px-5 py-3 rounded-xl shadow-sm border border-slate-200">
-            <Clock className="w-5 h-5 relative mt-1 text-teal-600" />
+          <div className="flex gap-4 items-center bg-white px-5 py-3 rounded-xl shadow-sm border border-slate-200">
+            <Clock className="w-5 h-5 text-teal-600" />
             <div className="text-right">
-              <p className="text-xl font-bold text-slate-900 font-mono">{formatTime(currentTime)}</p>
-              <p className="text-xs text-slate-500">Live Time</p>
+              <p className="text-sm font-medium text-slate-500">{formatTime(currentTime)}</p>
+              <p className="text-xs text-slate-400">Last updated: Just now</p>
             </div>
           </div>
         </div>

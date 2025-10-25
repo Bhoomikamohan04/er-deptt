@@ -50,6 +50,7 @@ const PatientFormPage = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [formHistory, setFormHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [viewingHistoryForm, setViewingHistoryForm] = useState(null);
 
   const presetColors = ["#000000", "#0000ff", "#ff0000", "#00ff00"];
   const [selectedForms, setSelectedForms] = useState([]);
@@ -161,7 +162,7 @@ const PatientFormPage = () => {
     if (imageLoaded && activeForm) {
       // Add a small delay to ensure image is fully rendered
       const timer = setTimeout(() => {
-        setupCanvas();
+      setupCanvas();
       }, 100);
       return () => clearTimeout(timer);
     }
@@ -170,6 +171,23 @@ const PatientFormPage = () => {
   useEffect(() => {
     if (mrno) fetchFormHistory();
   }, [mrno]);
+
+  // Configuration check function
+  const checkConfiguration = () => {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    
+    console.log("=== SUPABASE CONFIGURATION CHECK ===");
+    console.log("Supabase URL:", supabaseUrl ? "✓ Set" : "✗ Missing");
+    console.log("Supabase Key:", supabaseKey ? "✓ Set" : "✗ Missing");
+    console.log("Supabase Client:", supabaseclient ? "✓ Initialized" : "✗ Not initialized");
+    
+    if (!supabaseUrl || !supabaseKey) {
+      showError("Supabase configuration missing. Please check your .env.local file.");
+      return false;
+    }
+    return true;
+  };
 
   // Handle overwrite data from localStorage
   useEffect(() => {
@@ -490,17 +508,29 @@ const PatientFormPage = () => {
   const fetchFormHistory = async () => {
     setLoadingHistory(true);
     try {
+      // Check if Supabase is properly configured
+      if (!checkConfiguration()) {
+        setLoadingHistory(false);
+        return;
+      }
+
+      console.log("Fetching form history for patient:", mrno);
       const { data, error } = await supabaseclient
         .from("patient_er_forms")
         .select("*")
         .eq("patient_mrno", mrno)
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Database fetch error:", error);
+        throw new Error(`Failed to fetch history: ${error.message}`);
+      }
+      
+      console.log("Form history fetched successfully:", data?.length || 0, "records");
       setFormHistory(data || []);
     } catch (err) {
       console.error("Error fetching history:", err);
-      showError("Failed to load history");
+      showError(`Failed to load history: ${err.message}`);
     } finally {
       setLoadingHistory(false);
     }
@@ -539,22 +569,22 @@ const PatientFormPage = () => {
       console.log("DPR:", dpr);
 
       // Create context (no experimental flags)
-      const context = canvas.getContext("2d");
-      context.lineCap = "round";
-      context.lineJoin = "round";
+    const context = canvas.getContext("2d");
+    context.lineCap = "round";
+    context.lineJoin = "round";
       context.scale(dpr, dpr);
 
       // Draw image as background (mobile-safe)
       context.clearRect(0, 0, displayW, displayH);
       context.drawImage(image, 0, 0, displayW, displayH);
 
-      setCtx(context);
+    setCtx(context);
 
       // Save initial snapshot for undo
       createImageBitmap(canvas)
         .then((bitmap) => {
           setHistory([bitmap]);
-          setHistoryStep(0);
+    setHistoryStep(0);
         })
         .catch(() => {
           setHistory([]);
@@ -567,7 +597,7 @@ const PatientFormPage = () => {
     if (!canvasRef.current || !ctx) return;
     try {
       const snapshot = await createImageBitmap(canvasRef.current);
-      const updatedHistory = history.slice(0, historyStep + 1);
+    const updatedHistory = history.slice(0, historyStep + 1);
       const capped = [...updatedHistory, snapshot].slice(-25); // cap history to 25
       setHistory(capped);
       setHistoryStep(capped.length - 1);
@@ -677,7 +707,7 @@ const PatientFormPage = () => {
     if (rafIdRef.current) return; // Skip if already processing
 
     rafIdRef.current = requestAnimationFrame(() => {
-      const { x, y } = getCoordinates(e);
+    const { x, y } = getCoordinates(e);
       const lastPoint = lastPointRef.current;
 
       // Interpolate for smoothness
@@ -685,7 +715,7 @@ const PatientFormPage = () => {
       const midY = (lastPoint.y + y) / 2;
 
       ctx.quadraticCurveTo(lastPoint.x, lastPoint.y, midX, midY);
-      ctx.stroke();
+    ctx.stroke();
 
       lastPointRef.current = { x, y };
       rafIdRef.current = null;
@@ -701,9 +731,9 @@ const PatientFormPage = () => {
       rafIdRef.current = null;
     }
 
-    ctx.closePath();
+      ctx.closePath();
     setIsDrawing(false);
-    saveHistory();
+      saveHistory();
     if (activePointerIdRef.current != null && canvasRef.current && canvasRef.current.releasePointerCapture) {
       try {
         canvasRef.current.releasePointerCapture(activePointerIdRef.current);
@@ -730,8 +760,8 @@ const PatientFormPage = () => {
         // Restore drawing from snapshot
         ctx.drawImage(snapshot, 0, 0, rect.width, rect.height);
       }
-      setHistoryStep(step);
-      info("Undone");
+    setHistoryStep(step);
+    info("Undone");
     }
   };
 
@@ -753,22 +783,22 @@ const PatientFormPage = () => {
         // Restore drawing from snapshot
         ctx.drawImage(snapshot, 0, 0, rect.width, rect.height);
       }
-      setHistoryStep(step);
-      info("Redone");
+    setHistoryStep(step);
+    info("Redone");
     }
   };
 
   const clearCanvas = () => {
     if (!ctx || !canvasRef.current || !window.confirm("Clear all?")) return;
-    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     // Redraw the background image after clearing
     const image = imageRef.current;
     if (image) {
       const rect = image.getBoundingClientRect();
       ctx.drawImage(image, 0, 0, rect.width, rect.height);
     }
-    saveHistory();
-    success("Canvas cleared");
+      saveHistory();
+      success("Canvas cleared");
   };
 
   const mergeCanvasWithImage = () => {
@@ -863,10 +893,18 @@ const PatientFormPage = () => {
 
   const saveToSupabase = async () => {
     if (!activeForm) return showError("Please select a form first");
+    if (!mrno || mrno.trim() === "") return showError("Patient MRNO is required");
 
     try {
       info("Saving to supabase...");
       setSaving(true);
+      
+      // Check if Supabase is properly configured
+      if (!checkConfiguration()) {
+      setSaving(false);
+        return null;
+      }
+
       const mergedCanvas = mergeCanvasWithImage();
 
       // For overwrite forms, use higher quality settings
@@ -896,18 +934,34 @@ const PatientFormPage = () => {
       console.log("Blob created:", blob?.size, "bytes, type:", blob?.type);
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const fileName = `${mrno}/${activeForm.name.replace(/\s+/g, "_")}_${timestamp}.${ext}`;
+      const sanitizedFormName = activeForm.name.replace(/[^a-zA-Z0-9\s-_]/g, "").replace(/\s+/g, "_");
+      const sanitizedMrno = mrno.replace(/[^a-zA-Z0-9-_]/g, "");
+      const fileName = `${sanitizedMrno}/${sanitizedFormName}_${timestamp}.${ext}`;
+      
+      console.log("Filename generation:");
+      console.log("- Original MRNO:", mrno);
+      console.log("- Sanitized MRNO:", sanitizedMrno);
+      console.log("- Original form name:", activeForm.name);
+      console.log("- Sanitized form name:", sanitizedFormName);
+      console.log("- Final filename:", fileName);
 
+      console.log("Uploading to storage bucket 'er_forms'...");
       const { error: uploadError } = await supabaseclient.storage.from("er_forms").upload(fileName, blob, {
         cacheControl: "3600",
         upsert: false,
         contentType: mime,
       });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error("Storage upload error:", uploadError);
+        throw new Error(`Storage upload failed: ${uploadError.message}`);
+      }
 
+      console.log("Getting public URL...");
       const { data: urlData } = supabaseclient.storage.from("er_forms").getPublicUrl(fileName);
+      console.log("Public URL:", urlData.publicUrl);
 
+      console.log("Inserting into database...");
       const { error: dbError } = await supabaseclient.from("patient_er_forms").insert([
         {
           patient_mrno: mrno,
@@ -920,8 +974,12 @@ const PatientFormPage = () => {
         },
       ]);
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        console.error("Database insert error:", dbError);
+        throw new Error(`Database save failed: ${dbError.message}`);
+      }
 
+      console.log("Form saved successfully!");
       success(overwriteFormId ? "Form overwritten successfully!" : "Form saved successfully!");
       fetchFormHistory(); // Refresh history
 
@@ -933,7 +991,8 @@ const PatientFormPage = () => {
 
       return urlData.publicUrl;
     } catch (err) {
-      showError(`Failed: ${err.message}`);
+      console.error("Save error:", err);
+      showError(`Failed to save form: ${err.message}`);
       return null;
     } finally {
       setSaving(false);
@@ -1004,8 +1063,13 @@ const PatientFormPage = () => {
     `);
   };
 
-  const viewHistoryForm = (formUrl) => {
-    window.open(formUrl, "_blank");
+  const viewHistoryForm = (form) => {
+    setViewingHistoryForm(form);
+    setShowHistory(false); // Close the history sidebar
+  };
+
+  const closeHistoryForm = () => {
+    setViewingHistoryForm(null);
   };
 
   // Attachments state and handlers
@@ -1021,11 +1085,24 @@ const PatientFormPage = () => {
 
   const uploadAttachment = async () => {
     if (!attachmentFile) return showError("Choose a file to upload");
+    if (!mrno || mrno.trim() === "") return showError("Patient MRNO is required");
+    
     try {
       setUploadingAttachment(true);
-      const baseName = (attachmentName || attachmentFile.name).replace(/\s+/g, "_");
+      
+      // Check if Supabase is properly configured
+      if (!checkConfiguration()) {
+        setUploadingAttachment(false);
+        return;
+      }
+
+      const baseName = (attachmentName || attachmentFile.name).replace(/[^a-zA-Z0-9\s-_]/g, "").replace(/\s+/g, "_");
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const path = `${mrno}/attachments/${baseName}_${timestamp}`;
+      const fileExtension = attachmentFile.name.split('.').pop() || 'bin';
+      const sanitizedMrno = mrno.replace(/[^a-zA-Z0-9-_]/g, "");
+      const path = `${sanitizedMrno}/attachments/${baseName}_${timestamp}.${fileExtension}`;
+      
+      console.log("Uploading attachment to storage...");
       const { error: uploadError } = await supabaseclient.storage
         .from("er_forms")
         .upload(path, attachmentFile, {
@@ -1033,8 +1110,17 @@ const PatientFormPage = () => {
           upsert: false,
           contentType: attachmentFile.type || undefined,
         });
-      if (uploadError) throw uploadError;
+        
+      if (uploadError) {
+        console.error("Attachment upload error:", uploadError);
+        throw new Error(`Storage upload failed: ${uploadError.message}`);
+      }
+      
+      console.log("Getting attachment public URL...");
       const { data: urlData } = supabaseclient.storage.from("er_forms").getPublicUrl(path);
+      console.log("Attachment public URL:", urlData.publicUrl);
+      
+      console.log("Saving attachment to database...");
       const { error: dbError } = await supabaseclient.from("patient_er_forms").insert([
         {
           patient_mrno: mrno,
@@ -1045,12 +1131,19 @@ const PatientFormPage = () => {
           file_size: attachmentFile.size,
         },
       ]);
-      if (dbError) throw dbError;
-      success("Attachment uploaded");
+      
+      if (dbError) {
+        console.error("Attachment database error:", dbError);
+        throw new Error(`Database save failed: ${dbError.message}`);
+      }
+      
+      console.log("Attachment saved successfully!");
+      success("Attachment uploaded successfully!");
       setAttachmentFile(null);
       setAttachmentName("");
       fetchFormHistory();
     } catch (err) {
+      console.error("Attachment upload error:", err);
       showError(`Upload failed: ${err.message}`);
     } finally {
       setUploadingAttachment(false);
@@ -1114,7 +1207,7 @@ const PatientFormPage = () => {
                   <div
                     key={form.id}
                     className="bg-slate-50 p-3 rounded-lg border-[#00000037] border hover:border-teal-500 transition-all cursor-pointer"
-                    onClick={() => viewHistoryForm(form.file_url)}
+                    onClick={() => viewHistoryForm(form)}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1 min-w-0">
@@ -1158,13 +1251,13 @@ const PatientFormPage = () => {
                 placeholder="Attachment name (optional)"
                 className="w-full p-2 text-sm border border-[#00000037] rounded"
               />
-              <button
+            <button
                 onClick={uploadAttachment}
                 disabled={uploadingAttachment || !attachmentFile}
                 className="w-full py-2 text-sm bg-teal-600 text-white rounded disabled:opacity-50"
-              >
+            >
                 {uploadingAttachment ? "Uploading..." : "Upload"}
-              </button>
+            </button>
             </div>
             {attachments.length > 0 && (
               <div className="mt-4 space-y-2">
@@ -1205,7 +1298,7 @@ const PatientFormPage = () => {
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <button
                             className="text-xs text-teal-700"
-                            onClick={() => viewHistoryForm(row.file_url)}
+                            onClick={() => viewHistoryForm(row)}
                           >
                             View
                           </button>
@@ -1229,8 +1322,8 @@ const PatientFormPage = () => {
               </div>
             )}
           </div>
-        </div>
-      </div>
+            </div>
+          </div>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
@@ -1333,68 +1426,69 @@ const PatientFormPage = () => {
           </select>
         </div>
 
-        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50">
-          <div className="bg-white rounded-full shadow-2xl border px-3 py-2 flex items-center gap-2">
-            <button
-              onClick={() => setTool("pen")}
-              className={`p-2 rounded-full ${tool === "pen" ? "bg-teal-100" : ""}`}
-            >
-              <Pen className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setTool("highlighter")}
-              className={`p-2 rounded-full ${tool === "highlighter" ? "bg-yellow-100" : ""}`}
-            >
-              <Paintbrush className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setTool("eraser")}
-              className={`p-2 rounded-full ${tool === "eraser" ? "bg-red-100" : ""}`}
-            >
-              <Eraser className="w-4 h-4" />
-            </button>
-            <div className="w-px h-6 bg-slate-300"></div>
-            <input
-              type="color"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              className="w-8 h-8 rounded-full cursor-pointer"
-            />
-            {presetColors.map((c) => (
+        {!viewingHistoryForm && (
+          <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-50">
+            <div className="bg-white rounded-full shadow-2xl border px-3 py-2 flex items-center gap-2">
               <button
-                key={c}
-                onClick={() => setColor(c)}
+                onClick={() => setTool("pen")}
+              className={`p-2 rounded-full ${tool === "pen" ? "bg-teal-100" : ""}`}
+              >
+              <Pen className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setTool("highlighter")}
+              className={`p-2 rounded-full ${tool === "highlighter" ? "bg-yellow-100" : ""}`}
+              >
+              <Paintbrush className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setTool("eraser")}
+              className={`p-2 rounded-full ${tool === "eraser" ? "bg-red-100" : ""}`}
+              >
+              <Eraser className="w-4 h-4" />
+              </button>
+            <div className="w-px h-6 bg-slate-300"></div>
+              <input
+                type="color"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+              className="w-8 h-8 rounded-full cursor-pointer"
+              />
+                {presetColors.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setColor(c)}
                 className={`w-6 h-6 rounded-full border-2 ${
                   color === c ? "border-black" : "border-slate-300"
-                }`}
-                style={{ backgroundColor: c }}
-              />
-            ))}
+                    }`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
             <div className="w-px h-6 bg-slate-300"></div>
-            <input
-              type="range"
-              min={1}
+              <input
+                type="range"
+                min={1}
               max={10}
-              value={lineWidth}
-              onChange={(e) => setLineWidth(Number(e.target.value))}
+                value={lineWidth}
+                onChange={(e) => setLineWidth(Number(e.target.value))}
               className="w-20"
             />
             <span className="text-xs w-6">{lineWidth}</span>
             <div className="w-px h-6 bg-slate-300"></div>
-            <button
-              onClick={undo}
-              disabled={historyStep <= 0}
+              <button
+                onClick={undo}
+                disabled={historyStep <= 0}
               className="p-2 rounded-full disabled:opacity-30"
-            >
+              >
               <Undo className="w-4 h-4" />
-            </button>
-            <button
-              onClick={redo}
-              disabled={historyStep >= history.length - 1}
+              </button>
+              <button
+                onClick={redo}
+                disabled={historyStep >= history.length - 1}
               className="p-2 rounded-full disabled:opacity-30"
-            >
+              >
               <Redo className="w-4 h-4" />
-            </button>
+              </button>
             <button
               onClick={clearCanvas}
               disabled={!ctx}
@@ -1404,9 +1498,58 @@ const PatientFormPage = () => {
             </button>
           </div>
         </div>
+        )}
 
         <div className="flex-1 overflow-auto bg-slate-200 p-4">
-          {activeForm ? (
+        {viewingHistoryForm ? (
+          // Display history form
+          <div className="max-w-4xl mx-auto bg-white shadow-xl rounded-lg overflow-hidden">
+            <div className="bg-teal-600 text-white p-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">{viewingHistoryForm.form_name}</h2>
+                <p className="text-sm text-teal-100">
+                  Saved: {new Date(viewingHistoryForm.created_at).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.open(viewingHistoryForm.file_url, '_blank')}
+                  className="p-2 hover:bg-teal-700 rounded-lg transition-colors"
+                  title="Download/View Full Size"
+                >
+                  <Download className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={closeHistoryForm}
+                  className="p-2 hover:bg-teal-700 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-4">
+              {viewingHistoryForm.file_type === "text/html" ? (
+                <iframe
+                  src={viewingHistoryForm.file_url}
+                  className="w-full h-[600px] border-0"
+                  title={viewingHistoryForm.form_name}
+                />
+              ) : (
+                <img
+                  src={viewingHistoryForm.file_url}
+                  alt={viewingHistoryForm.form_name}
+                  className="w-full h-auto max-h-[600px] object-contain"
+                />
+              )}
+            </div>
+          </div>
+        ) : activeForm ? (
             activeForm.name === "GENERAL OUT PATIENT CASE SHEET" ? (
               <OutPatientCaseSheet
                 patient={patient}
@@ -1458,7 +1601,9 @@ const PatientFormPage = () => {
 
                     const blob = new Blob([htmlContent], { type: "text/html" });
                     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-                    const fileName = `${mrno}/outpatient_case_sheet_${timestamp}.html`;
+                    const sanitizedFormName = activeForm.name.replace(/[^a-zA-Z0-9\s-_]/g, "").replace(/\s+/g, "_");
+                    const sanitizedMrno = mrno.replace(/[^a-zA-Z0-9-_]/g, "");
+                    const fileName = `${sanitizedMrno}/${sanitizedFormName}_${timestamp}.html`;
 
                     const { error: uploadError } = await supabaseclient.storage
                       .from("er_forms")
@@ -1507,15 +1652,15 @@ const PatientFormPage = () => {
             ) : (
               <div className="max-w-4xl mx-auto bg-white shadow-xl rounded-lg overflow-hidden">
                 <div className="relative">
-                  <img
-                    ref={imageRef}
-                    src={activeForm.url}
-                    alt={activeForm.name}
+              <img
+                ref={imageRef}
+                src={activeForm.url}
+                alt={activeForm.name}
                     className="block w-full h-auto select-none pointer-events-none"
                     draggable="false"
-                    onLoad={() => {
+                onLoad={() => {
                       console.log("Image loaded successfully:", activeForm.url);
-                      setImageLoaded(true);
+                  setImageLoaded(true);
                       // Force a re-render to ensure proper sizing
                       setTimeout(() => {
                         if (imageRef.current) {
@@ -1523,34 +1668,34 @@ const PatientFormPage = () => {
                           window.dispatchEvent(event);
                         }
                       }, 200);
-                    }}
-                    onError={() => {
+                }}
+                onError={() => {
                       console.error("Failed to load form image:", activeForm.url);
                       setImageLoaded(false);
-                    }}
-                  />
-                  <canvas
-                    ref={canvasRef}
+                }}
+              />
+              <canvas
+                ref={canvasRef}
                     className="absolute top-0 left-0 w-full h-full cursor-crosshair"
-                    style={{ touchAction: "none" }}
+                style={{ touchAction: "none" }}
                     onPointerDown={startDrawing}
                     onPointerMove={draw}
                     onPointerUp={stopDrawing}
                     onPointerCancel={stopDrawing}
                     onPointerLeave={stopDrawing}
-                  />
-                </div>
-              </div>
+              />
+            </div>
+          </div>
             )
-          ) : (
+        ) : (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
-                <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+            <FileText className="w-16 h-16 text-slate-300 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold">No Form Selected</h3>
                 <p className="text-sm text-slate-500">Select above</p>
               </div>
-            </div>
-          )}
+          </div>
+        )}
         </div>
       </div>
     </div>
