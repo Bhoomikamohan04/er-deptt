@@ -509,7 +509,7 @@ const PatientFormPage = () => {
   const fetchFormHistory = async () => {
     setLoadingHistory(true);
     try {
-<<<<<<< HEAD
+
       // Check if Supabase is properly configured
       if (!checkConfiguration()) {
         setLoadingHistory(false);
@@ -517,10 +517,8 @@ const PatientFormPage = () => {
       }
 
       console.log("Fetching form history for patient:", mrno);
-      const { data, error } = await supabaseclient
-=======
+
       const { data, error } = await supabaseAdmin
->>>>>>> 8dd49ee0d2a934b64c9bc840100b5a1befa96272
         .from("patient_er_forms")
         .select("*")
         .eq("patient_mrno", mrno)
@@ -939,7 +937,6 @@ const PatientFormPage = () => {
       console.log("Blob created:", blob?.size, "bytes, type:", blob?.type);
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-<<<<<<< HEAD
       const sanitizedFormName = activeForm.name.replace(/[^a-zA-Z0-9\s-_]/g, "").replace(/\s+/g, "_");
       const sanitizedMrno = mrno.replace(/[^a-zA-Z0-9-_]/g, "");
       const fileName = `${sanitizedMrno}/${sanitizedFormName}_${timestamp}.${ext}`;
@@ -950,11 +947,6 @@ const PatientFormPage = () => {
       console.log("- Original form name:", activeForm.name);
       console.log("- Sanitized form name:", sanitizedFormName);
       console.log("- Final filename:", fileName);
-=======
-      const safeFormName = activeForm.name.replace(/[()]/g, "").replace(/[^a-zA-Z0-9_\-]/g, "_");
-
-      const fileName = `${mrno}/${safeFormName}_${timestamp}.${ext}`;
->>>>>>> 8dd49ee0d2a934b64c9bc840100b5a1befa96272
 
       console.log("Uploading to storage bucket 'er_forms'...");
       const { error: uploadError } = await supabaseclient.storage.from("er_forms").upload(fileName, blob, {
@@ -962,27 +954,18 @@ const PatientFormPage = () => {
         upsert: false,
         contentType: mime,
       });
-<<<<<<< HEAD
 
       if (uploadError) {
         console.error("Storage upload error:", uploadError);
         throw new Error(`Storage upload failed: ${uploadError.message}`);
       }
-=======
-      if (uploadError) console.error("Upload failed:", uploadError);
-      if (uploadError) throw uploadError;
->>>>>>> 8dd49ee0d2a934b64c9bc840100b5a1befa96272
 
       console.log("Getting public URL...");
       const { data: urlData } = supabaseclient.storage.from("er_forms").getPublicUrl(fileName);
       console.log("Public URL:", urlData.publicUrl);
 
-<<<<<<< HEAD
       console.log("Inserting into database...");
       const { error: dbError } = await supabaseclient.from("patient_er_forms").insert([
-=======
-      const { error: dbError } = await supabaseAdmin.from("patient_er_forms").insert([
->>>>>>> 8dd49ee0d2a934b64c9bc840100b5a1befa96272
         {
           patient_mrno: mrno,
           form_name: activeForm.name,
@@ -1138,14 +1121,10 @@ const PatientFormPage = () => {
       
       console.log("Getting attachment public URL...");
       const { data: urlData } = supabaseclient.storage.from("er_forms").getPublicUrl(path);
-<<<<<<< HEAD
       console.log("Attachment public URL:", urlData.publicUrl);
       
       console.log("Saving attachment to database...");
       const { error: dbError } = await supabaseclient.from("patient_er_forms").insert([
-=======
-      const { error: dbError } = await supabaseAdmin.from("patient_er_forms").insert([
->>>>>>> 8dd49ee0d2a934b64c9bc840100b5a1befa96272
         {
           patient_mrno: mrno,
           form_name: attachmentName || attachmentFile.name,
